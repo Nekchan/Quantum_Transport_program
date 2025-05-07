@@ -50,7 +50,6 @@ std::vector<arma::cx_mat> sancho_rubio_algorithm(int n, std::vector<arma::cx_dou
     arma::cx_mat epsilon_s;
     arma::cx_mat tmp;
     std::vector<arma::cx_mat> g_surface;
-    std::cout << "XD";
     for(size_t i =0; i< Energy.size(); i++)
     {
         D = Energy[i]*arma::eye<arma::cx_mat>(t.n_rows, t.n_cols) -2*t;
@@ -93,13 +92,15 @@ int main()
 
     std::vector<arma::cx_mat> g_surface = sancho_rubio_algorithm(n, E, t);
 
-    for(size_t i = 0; i<E.size(); i++)
+    /*for(size_t i = 0; i<E.size(); i++)
     {
         std::cout << E[i].real() << " " << g_surface[i](0,0).real() << " " << g_surface[i](0,0).imag() << std::endl;
-    }
+    }*/
+
+    std::cout<<"Calculations ended succesfully\n";
 
     //Saving to file
-    std::fstream results("results.txt", std::ios::out);
+    std::fstream results("results.dat", std::ios::out);
 
     if(!results)
     {
@@ -114,6 +115,7 @@ int main()
     }
     
     results.close();
+    std::cout << "Results saved to a file succesfully\n";
 
     return 0;
 }
