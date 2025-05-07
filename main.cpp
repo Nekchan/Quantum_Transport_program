@@ -2,10 +2,12 @@
 #include<armadillo>
 #include<vector>
 #include<complex>
+#include<fstream>
+
 
 /*
 -------------Energy function---------------
-This function returns a vector with energy values expressed in complex numbers.
+This function returns a vector<cx_double> with energy values expressed in complex numbers.
 The vector can later be used for further calculations.
 The function needs the following input values:
     -int N  - number of values,
@@ -27,7 +29,13 @@ std::vector<arma::cx_double> Energy(int N, double E_min, double dE, const double
 }
 
 /*------------Sancho-Rubio algorithm--------------
-
+This function calculates an aproximapate surface Green's function returned as a vector<cx_mat>. I designed it, so that 
+(hopefully) it can be easilly scaled up to a 2D system. 
+The function needs following inputs:
+    -int n - number of iteration through which the algorithm has to go through (hopefully in 
+    the future I will add a convergence criterium, so that this number won't be necessary),
+    -vector<cx_double> Energy - vector which contains the energy values of the system,
+    -cx_mat t - a matrix that posesses the hopping integrals of the system.
 */
 
 std::vector<arma::cx_mat> sancho_rubio_algorithm(int n, std::vector<arma::cx_double> Energy, arma::cx_mat t)
@@ -68,14 +76,17 @@ std::vector<arma::cx_mat> sancho_rubio_algorithm(int n, std::vector<arma::cx_dou
 
 int main()
 {
+    //initial values required for the energy
     double E_min = -1.0;            //minimum energy in eV
     const double eta = 1e-12;       //a small constant approaching zero that models discontinuity in eV
-    double dE = 0.01;            //the difference between next and previous energy eV    
-    int N = 6/dE;
+    double dE = 0.001;               //the difference between next and previous energy eV    
+    int N = 6/dE;                   //number of points calculated
 
-    std::vector<arma::cx_double> E = Energy(N, E_min, dE, eta);
+    //Assaining an energy
+    std::vector<arma::cx_double> E = Energy(N, E_min, dE, eta);     //energy data of the system in eV
     
-    arma::cx_mat t = arma::ones<arma::cx_mat>(1, 1);
+    //calculating the aproximate surface Green's function
+    arma::cx_mat t = arma::ones<arma::cx_mat>(1, 1);    //matrix containing hopping integrals
     t(0, 0) = 1;
     
     int n = 100;
@@ -84,9 +95,25 @@ int main()
 
     for(size_t i = 0; i<E.size(); i++)
     {
-        std::cout << E[i] << " " << g_surface[i] << std::endl;
+        std::cout << E[i].real() << " " << g_surface[i](0,0).real() << " " << g_surface[i](0,0).imag() << std::endl;
     }
 
+    //Saving to file
+    std::fstream results("results.txt", std::ios::out);
+
+    if(!results)
+    {
+        std::cerr << "File results.txt was unable to open";
+        return 1;
+    }
+
+    
+    for(size_t i = 0; i<E.size(); i++)
+    {
+        results << E[i].real() << " " << g_surface[i](0,0).real() << " " << g_surface[i](0,0).imag() << std::endl;
+    }
+    
+    results.close();
 
     return 0;
 }
