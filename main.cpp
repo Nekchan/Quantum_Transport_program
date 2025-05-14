@@ -73,11 +73,14 @@ std::vector<arma::cx_mat> sancho_rubio_algorithm(int n, std::vector<arma::cx_dou
 }
 
 
+
+
 int main()
 {
+    
     //initial values required for the energy
     double E_min = -1.0;            //minimum energy in eV
-    const double eta = 1e-12;       //a small constant approaching zero that models discontinuity in eV
+    const double eta = 1e-27;       //a small constant approaching zero that models discontinuity in eV
     double dE = 0.001;               //the difference between next and previous energy eV    
     int N = 6/dE;                   //number of points calculated
 
@@ -88,9 +91,26 @@ int main()
     arma::cx_mat t = arma::ones<arma::cx_mat>(1, 1);    //matrix containing hopping integrals
     t(0, 0) = 1;
     
-    int n = 100;
+    int n = 500;
 
     std::vector<arma::cx_mat> g_surface = sancho_rubio_algorithm(n, E, t);
+
+    arma::cx_double ii = arma::cx_double(0,1);
+
+    arma::cx_mat u = -t;
+    std::vector<arma::cx_mat> self_energy_left;
+    std::vector<arma::cx_mat> self_energy_right;
+    std::vector<arma::cx_mat> gamma_left;
+    std::vector<arma::cx_mat> gamma_right;
+    for(size_t i =0; i< E.size(); i++)
+    {
+        self_energy_left.push_back(u*g_surface[i]*arma::trans(u));
+        self_energy_right.push_back(arma::trans(u)*g_surface[i]*u);
+        gamma_left.push_back(ii*(self_energy_left[i] - arma::trans(self_energy_left[i])));
+        gamma_right.push_back(ii*(self_energy_right[i] - arma::trans(self_energy_right[i])));
+    }
+
+
 
     /*for(size_t i = 0; i<E.size(); i++)
     {
@@ -100,22 +120,56 @@ int main()
     std::cout<<"Calculations ended succesfully\n";
 
     //Saving to file
-    std::fstream results("results.dat", std::ios::out);
+    std::fstream surf_greens_fun("surf_greens_fun.dat", std::ios::out);
 
-    if(!results)
+    if(!surf_greens_fun)
     {
-        std::cerr << "File results.txt was unable to open";
+        std::cerr << "File surf_greens_fun.txt was unable to open";
         return 1;
     }
 
     
     for(size_t i = 0; i<E.size(); i++)
     {
-        results << E[i].real() << " " << g_surface[i](0,0).real() << " " << g_surface[i](0,0).imag() << std::endl;
+        surf_greens_fun << E[i].real() << " " << g_surface[i](0,0).real() << " " << g_surface[i](0,0).imag() << " " << self_energy_left[i](0,0).real()  << " " << self_energy_left[i](0,0).imag() << std::endl;
     }
     
-    results.close();
-    std::cout << "Results saved to a file succesfully\n";
+    surf_greens_fun.close();
+    std::cout << "Surface Greens function saved to a file succesfully\n";
+
+    std::fstream self_energies("self_energies.dat", std::ios::out);
+
+    if(!self_energies)
+    {
+        std::cerr << "File self_energies.txt was unable to open";
+        return 1;
+    }
+
+    
+    for(size_t i = 0; i<E.size(); i++)
+    {
+        self_energies << E[i].real() << " " << self_energy_left[i](0,0).real()  << " " << self_energy_left[i](0,0).imag() << " " << self_energy_right[i](0,0).real()  << " " << self_energy_right[i](0,0).imag() << std::endl;
+    }
+    
+    self_energies.close();
+    std::cout << "Self energies saved to a file succesfully\n";
+
+    std::fstream gamma("gamma.dat", std::ios::out);
+
+    if(!gamma)
+    {
+        std::cerr << "File gamma.txt was unable to open";
+        return 1;
+    }
+
+    
+    for(size_t i = 0; i<E.size(); i++)
+    {
+        gamma << E[i].real() << " " << gamma_left[i](0,0).real()  << " " << gamma_left[i](0,0).imag() << " " << gamma_right[i](0,0).real()  << " " << gamma_right[i](0,0).imag() << std::endl;
+    }
+    
+    gamma.close();
+    std::cout << "Gamma matrices saved to a file succesfully\n";
 
     return 0;
 }
