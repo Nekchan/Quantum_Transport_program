@@ -28,6 +28,22 @@ std::vector<arma::cx_double> Energy(int N, double E_min, double dE, const double
     return Energy;
 }
 
+arma::cx_mat hamiltonian_1D(int size, arma::cx_mat t)
+{
+    arma::cx_mat Hamiltonian;
+    arma::cx_mat H_I = -2*arma::eye<arma::cx_mat>(size, size);
+    arma::cx_mat H_down = arma::zeros<arma::cx_mat>(size, size);
+    arma::cx_mat H_up = arma::zeros<arma::cx_mat>(size, size);
+    for(size_t i = 0; i<size-1; i++)
+    {
+        H_down(i+1,i) = 1;
+        H_up(i,i+1) = 1;
+    }
+    Hamiltonian = arma::kron(H_I, t) + arma::kron(H_down, t) + arma::kron(H_up, t);
+    return Hamiltonian;
+}
+
+
 /*------------Sancho-Rubio algorithm--------------
 This function calculates an aproximapate surface Green's function returned as a vector<cx_mat>. I designed it, so that 
 (hopefully) it can be easilly scaled up to a 2D system. 
@@ -80,9 +96,10 @@ int main()
     
     //initial values required for the energy
     double E_min = -1.0;            //minimum energy in eV
-    const double eta = 1e-27;       //a small constant approaching zero that models discontinuity in eV
+    const double eta = 1e-18;       //a small constant approaching zero that models discontinuity in eV
     double dE = 0.001;               //the difference between next and previous energy eV    
     int N = 6/dE;                   //number of points calculated
+    int size = 10;
 
     //Assaining an energy
     std::vector<arma::cx_double> E = Energy(N, E_min, dE, eta);     //energy data of the system in eV
@@ -91,7 +108,7 @@ int main()
     arma::cx_mat t = arma::ones<arma::cx_mat>(1, 1);    //matrix containing hopping integrals
     t(0, 0) = 1;
     
-    int n = 500;
+    int n = 100;
 
     std::vector<arma::cx_mat> g_surface = sancho_rubio_algorithm(n, E, t);
 
@@ -110,12 +127,9 @@ int main()
         gamma_right.push_back(ii*(self_energy_right[i] - arma::trans(self_energy_right[i])));
     }
 
-
-
-    /*for(size_t i = 0; i<E.size(); i++)
-    {
-        std::cout << E[i].real() << " " << g_surface[i](0,0).real() << " " << g_surface[i](0,0).imag() << std::endl;
-    }*/
+    arma::cx_mat H_sample = hamiltonian_1D(size, t);
+    
+    
 
     std::cout<<"Calculations ended succesfully\n";
 
@@ -124,7 +138,12 @@ int main()
 
     if(!surf_greens_fun)
     {
-        std::cerr << "File surf_greens_fun.txt was unable to open";
+        std::system("touch surf_greens_fun.dat");
+    }
+
+    if(!surf_greens_fun)
+    {
+        std::cerr << "File surf_greens_fun.dat was unable to open";
         return 1;
     }
 
@@ -141,7 +160,12 @@ int main()
 
     if(!self_energies)
     {
-        std::cerr << "File self_energies.txt was unable to open";
+        std::system("touch self_energies.dat");
+    }
+
+    if(!self_energies)
+    {
+        std::cerr << "File self_energies.dat was unable to open";
         return 1;
     }
 
@@ -158,7 +182,12 @@ int main()
 
     if(!gamma)
     {
-        std::cerr << "File gamma.txt was unable to open";
+        std::system("touch gamma.dat");
+    }
+
+    if(!gamma)
+    {
+        std::cerr << "File gamma.dat was unable to open";
         return 1;
     }
 
@@ -170,6 +199,30 @@ int main()
     
     gamma.close();
     std::cout << "Gamma matrices saved to a file succesfully\n";
+
+    std::fstream hamiltonian_sample("hamiltonian_sample.dat", std::ios::out);
+
+    if(!hamiltonian_sample)
+    {
+        std::system("touch hamiltonian_sample.dat");
+    }
+
+    if(!hamiltonian_sample)
+    {
+        std::cerr << "File hamiltonian_sample.dat was unable to open";
+    }
+
+    for(size_t i = 0; i<size; i++)
+    {
+        for(size_t j = 0; j<size; j++)
+        {
+            hamiltonian_sample << H_sample(i, j) << " ";
+        }
+        hamiltonian_sample << std::endl;
+    }
+
+    hamiltonian_sample.close();
+    std::cout << "Hamiltonian of the sample saved to a file succesfully\n";
 
     return 0;
 }
