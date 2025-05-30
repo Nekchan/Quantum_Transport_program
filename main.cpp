@@ -69,20 +69,21 @@ std::vector<arma::cx_mat> sancho_rubio_algorithm(int n, std::vector<arma::cx_dou
     for(size_t i =0; i< Energy.size(); i++)
     {
         D = Energy[i]*arma::eye<arma::cx_mat>(t.n_rows, t.n_cols) -2*t;
-        tmp = arma::inv(D);
+        tmp = arma::solve(D, arma::eye<arma::cx_mat>(D.n_rows, D.n_cols));
         alpha = A*tmp*A;
         beta = B*tmp*B;
         epsilon = D - B*tmp*A - A*tmp*B;
         epsilon_s = D - A*tmp*B;
         for(int k = 0; k<=n; k++)
         {
-            tmp = arma::inv(epsilon);
+            tmp = arma::solve(epsilon, arma::eye<arma::cx_mat>(epsilon.n_rows, epsilon.n_cols));
             epsilon -=beta*tmp*alpha +alpha*tmp*beta;
             epsilon_s -= alpha*tmp*beta;
             alpha = alpha*tmp*alpha;
             beta = beta*tmp*beta;
+            
         }
-        g_surface_i = arma::inv(epsilon_s);
+        g_surface_i = arma::solve(epsilon_s, arma::eye<arma::cx_mat>(epsilon_s.n_rows, epsilon_s.n_cols));
         g_surface.push_back(g_surface_i);
     }
     return g_surface;
@@ -93,15 +94,17 @@ std::vector<arma::cx_mat> retarted_GF(int len, std::vector<arma::cx_double> Ener
 {
     arma::cx_mat mat_2_inv;
     arma::cx_mat tmp;
-    arma::cx_mat self_energy_left_mat = arma::zeros<arma::cx_mat>(len, len);
-    arma::cx_mat self_energy_right_mat = arma::zeros<arma::cx_mat>(len, len);
-    self_energy_left_mat(0,0) = 1;
-    self_energy_right_mat(len-1,len-1) = 1;
+    arma::cx_mat tmp_left = arma::zeros<arma::cx_mat>(len, len);
+    arma::cx_mat tmp_right = arma::zeros<arma::cx_mat>(len, len);
+    arma::cx_mat self_energy_left_mat;
+    arma::cx_mat self_energy_right_mat;
+    tmp_left(0,0) = 1;
+    tmp_right(len-1,len-1) = 1;
     std::vector<arma::cx_mat> GF_retarted;
     for(size_t i = 0; i< Energy.size(); i++)
     {
-        self_energy_left_mat = arma::kron(self_energy_left_mat, self_energy_left[i]);
-        self_energy_right_mat = arma::kron(self_energy_right_mat, self_energy_right[i]);
+        self_energy_left_mat = arma::kron(tmp_left, self_energy_left[i]);
+        self_energy_right_mat = arma::kron(tmp_right, self_energy_right[i]);
         mat_2_inv = Energy[i] - Hamiltonian - self_energy_left_mat - self_energy_right_mat;
         tmp = arma::inv(mat_2_inv);
         GF_retarted.push_back(tmp);
@@ -112,11 +115,16 @@ std::vector<arma::cx_mat> retarted_GF(int len, std::vector<arma::cx_double> Ener
 std::vector<arma::cx_double> Transport_function(std::vector<arma::cx_mat> retarded_Greens_function, std::vector<arma::cx_mat> gamma_left, std::vector<arma::cx_mat> gamma_right)
 {
     std::vector<arma::cx_double> transport_function;
+    arma::cx_mat GF_advanced;
     arma::cx_double G_1N;
+    arma::cx_double G_N1;
     for(size_t i = 0; i<retarded_Greens_function.size(); i++)
     {
+        GF_advanced = arma::trans(retarded_Greens_function[i]);
         G_1N = retarded_Greens_function[i](0, retarded_Greens_function[i].n_cols-1);
-        transport_function.push_back(gamma_left[i](0,0)*gamma_right[i](0,0)*std::norm(G_1N));
+        G_N1 = GF_advanced(retarded_Greens_function[i].n_cols-1, 0);
+        transport_function.push_back(G_N1*gamma_right[i](0,0)*G_1N*gamma_left[i](0,0));
+        //std::cout << G_N1 << " " << gamma_right[i](0, 0) << " " << G_1N << " " << gamma_left[i](0, 0) << std::endl;
     }
     return transport_function;
 }
@@ -272,7 +280,7 @@ int main()
     {
         std::cerr << "File Greens_fun_retarded.dat was unable to open";
     }
-
+    /*
     for(size_t k = 0; k< GF_retarted.size(); k++)
     {
         Greens_fun_retarded << "Retarded Green's function for E=" << E[k] << std::endl;
@@ -285,6 +293,12 @@ int main()
             Greens_fun_retarded << std::endl;
         }
     }
+    */
+   for(size_t k = 0; k< GF_retarted.size(); k++)
+   {
+        Greens_fun_retarded << E[k].real() << " " << GF_retarted[k](0, GF_retarted[k].n_cols-1).real() << " " << GF_retarted[k](0, GF_retarted[k].n_cols-1).imag() << std::endl;
+   }
+    
     
 
     Greens_fun_retarded.close();
