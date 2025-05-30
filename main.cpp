@@ -54,7 +54,7 @@ The function needs following inputs:
     -cx_mat t - a matrix that posesses the hopping integrals of the system.
 */
 
-std::vector<arma::cx_mat> sancho_rubio_algorithm(int n, std::vector<arma::cx_double> Energy, arma::cx_mat t)
+std::vector<arma::cx_mat> sancho_rubio_algorithm(std::vector<arma::cx_double> Energy, arma::cx_mat t, double tol = 1e-8, int max_iter = 500)
 {
     arma::cx_mat A = -t;
     arma::cx_mat B = -t;
@@ -64,8 +64,11 @@ std::vector<arma::cx_mat> sancho_rubio_algorithm(int n, std::vector<arma::cx_dou
     arma::cx_mat beta;
     arma::cx_mat epsilon;
     arma::cx_mat epsilon_s;
+    arma::cx_mat epsilon_s_prev;
     arma::cx_mat tmp;
     std::vector<arma::cx_mat> g_surface;
+    double delta;
+    int iter;
     for(size_t i =0; i< Energy.size(); i++)
     {
         D = Energy[i]*arma::eye<arma::cx_mat>(t.n_rows, t.n_cols) -2*t;
@@ -74,14 +77,21 @@ std::vector<arma::cx_mat> sancho_rubio_algorithm(int n, std::vector<arma::cx_dou
         beta = B*tmp*B;
         epsilon = D - B*tmp*A - A*tmp*B;
         epsilon_s = D - A*tmp*B;
-        for(int k = 0; k<=n; k++)
+
+        delta = 1.0;
+        iter = 0;
+
+        while(delta>=tol && iter<=max_iter)
         {
             tmp = arma::solve(epsilon, arma::eye<arma::cx_mat>(epsilon.n_rows, epsilon.n_cols));
             epsilon -=beta*tmp*alpha +alpha*tmp*beta;
+            epsilon_s_prev = epsilon_s;
             epsilon_s -= alpha*tmp*beta;
             alpha = alpha*tmp*alpha;
             beta = beta*tmp*beta;
             
+            delta = arma::norm(epsilon_s - epsilon_s_prev, "fro");
+            iter++;
         }
         g_surface_i = arma::solve(epsilon_s, arma::eye<arma::cx_mat>(epsilon_s.n_rows, epsilon_s.n_cols));
         g_surface.push_back(g_surface_i);
@@ -150,7 +160,7 @@ int main()
     
     int n = 500;
 
-    std::vector<arma::cx_mat> g_surface = sancho_rubio_algorithm(n, E, t);
+    std::vector<arma::cx_mat> g_surface = sancho_rubio_algorithm(E, t);
 
     arma::cx_double ii = arma::cx_double(0,1);
 
