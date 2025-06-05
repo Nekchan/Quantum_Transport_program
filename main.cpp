@@ -31,13 +31,13 @@ std::vector<arma::cx_double> Energy(int N, double E_min, double dE, const double
 arma::cx_mat hamiltonian_1D(int len, arma::cx_mat t)
 {
     arma::cx_mat Hamiltonian;
-    arma::cx_mat H_I = -2*arma::eye<arma::cx_mat>(len, len);
+    arma::cx_mat H_I = 2*arma::eye<arma::cx_mat>(len, len);
     arma::cx_mat H_down = arma::zeros<arma::cx_mat>(len, len);
     arma::cx_mat H_up = arma::zeros<arma::cx_mat>(len, len);
     for(size_t i = 0; i<len-1; i++)
     {
-        H_down(i+1,i) = 1;
-        H_up(i,i+1) = 1;
+        H_down(i+1,i) = -1;
+        H_up(i,i+1) = -1;
     }
     Hamiltonian = arma::kron(H_I, t) + arma::kron(H_down, t) + arma::kron(H_up, t);
     return Hamiltonian;
@@ -54,7 +54,7 @@ The function needs following inputs:
     -cx_mat t - a matrix that posesses the hopping integrals of the system.
 */
 
-std::vector<arma::cx_mat> sancho_rubio_algorithm(std::vector<arma::cx_double> Energy, arma::cx_mat t, double tol = 1e-8, int max_iter = 500)
+std::vector<arma::cx_mat> sancho_rubio_algorithm(std::vector<arma::cx_double> Energy, arma::cx_mat t, double tol = 1e-8, int max_iter = 10000)
 {
     arma::cx_mat A = -t;
     arma::cx_mat B = -t;
@@ -93,6 +93,7 @@ std::vector<arma::cx_mat> sancho_rubio_algorithm(std::vector<arma::cx_double> En
             delta = arma::norm(epsilon_s - epsilon_s_prev, "fro");
             iter++;
         }
+        
         g_surface_i = arma::solve(epsilon_s, arma::eye<arma::cx_mat>(epsilon_s.n_rows, epsilon_s.n_cols));
         g_surface.push_back(g_surface_i);
     }
@@ -116,7 +117,7 @@ std::vector<arma::cx_mat> retarted_GF(int len, std::vector<arma::cx_double> Ener
         self_energy_left_mat = arma::kron(tmp_left, self_energy_left[i]);
         self_energy_right_mat = arma::kron(tmp_right, self_energy_right[i]);
         mat_2_inv = Energy[i] - Hamiltonian - self_energy_left_mat - self_energy_right_mat;
-        tmp = arma::inv(mat_2_inv);
+        tmp = arma::solve(mat_2_inv, arma::eye<arma::cx_mat>(mat_2_inv.n_rows, mat_2_inv.n_cols));
         GF_retarted.push_back(tmp);
     }
     return GF_retarted;
@@ -133,7 +134,7 @@ std::vector<arma::cx_double> Transport_function(std::vector<arma::cx_mat> retard
         GF_advanced = arma::trans(retarded_Greens_function[i]);
         G_1N = retarded_Greens_function[i](0, retarded_Greens_function[i].n_cols-1);
         G_N1 = GF_advanced(retarded_Greens_function[i].n_cols-1, 0);
-        transport_function.push_back(G_N1*gamma_right[i](0,0)*G_1N*gamma_left[i](0,0));
+        transport_function.push_back(gamma_left[i](0,0)*G_1N*gamma_right[i](0,0)*G_N1);
         //std::cout << G_N1 << " " << gamma_right[i](0, 0) << " " << G_1N << " " << gamma_left[i](0, 0) << std::endl;
     }
     return transport_function;
@@ -146,10 +147,10 @@ int main()
     
     //initial values required for the energy
     double E_min = -1.0;            //minimum energy in eV
-    const double eta = 1e-18;       //a small constant approaching zero that models discontinuity in eV
+    const double eta = 1e-12;       //a small constant approaching zero that models discontinuity in eV
     double dE = 0.001;               //the difference between next and previous energy eV    
     int N = 6/dE;                   //number of points calculated
-    int size = 10;
+    int size = 100;
 
     //Assaining an energy
     std::vector<arma::cx_double> E = Energy(N, E_min, dE, eta);     //energy data of the system in eV
@@ -157,8 +158,6 @@ int main()
     //calculating the aproximate surface Green's function
     arma::cx_mat t = arma::ones<arma::cx_mat>(1, 1);    //matrix containing hopping integrals
     t(0, 0) = 1;
-    
-    int n = 500;
 
     std::vector<arma::cx_mat> g_surface = sancho_rubio_algorithm(E, t);
 
@@ -180,6 +179,13 @@ int main()
     arma::cx_mat H_sample = hamiltonian_1D(size, t);
     
     std::vector<arma::cx_mat> GF_retarted = retarted_GF(size, E, self_energy_left, self_energy_right, H_sample);
+
+    std::vector<arma::cx_mat> GF_advanced;
+    
+    for(size_t i =0; i<GF_retarted.size(); i++)
+    {
+        GF_advanced.push_back(arma::trans(GF_retarted[i]));
+    }
 
     std::vector<arma::cx_double> T = Transport_function(GF_retarted, gamma_left, gamma_right);
 
@@ -357,6 +363,41 @@ int main()
     
     conductance.close();
     std::cout << "Conductance saved to a file succesfully\n";
+
+    std::fstream Greens_fun_advanced("Greens_fun_advanced.dat", std::ios::out);
+
+    if(!Greens_fun_advanced)
+    {
+        std::system("touch Greens_fun_advanced.dat");
+    }
+
+    if(!Greens_fun_advanced)
+    {
+        std::cerr << "File Greens_fun_advanced.dat was unable to open";
+    }
+    /*
+    for(size_t k = 0; k< GF_retarted.size(); k++)
+    {
+        Greens_fun_advanced << "advanced Green's function for E=" << E[k] << std::endl;
+        for(size_t i = 0; i<size; i++)
+        {
+            for(size_t j = 0; j<size; j++)
+            {
+                Greens_fun_advanced << GF_retarted[k](i, j) << " ";
+            }
+            Greens_fun_advanced << std::endl;
+        }
+    }
+    */
+   for(size_t k = 0; k< E.size(); k++)
+   {
+        Greens_fun_advanced << E[k].real() << " " << GF_retarted[k](0, GF_retarted[k].n_cols-1).real()*GF_advanced[k](GF_advanced[k].n_cols-1, 0).real() << " " << GF_retarted[k](0, GF_retarted[k].n_cols-1).imag()*GF_advanced[k](GF_advanced[k].n_cols-1, 0).imag() << std::endl;
+   }
+    
+    
+
+    Greens_fun_advanced.close();
+    std::cout << "advanced Greens function saved to a file succesfully\n";
 
     return 0;
 }
