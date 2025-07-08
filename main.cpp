@@ -20,7 +20,7 @@ std::vector<arma::cx_double> Energy(int N, double E_min, double dE, const double
 {
     std::vector<arma::cx_double> Energy;
     arma::cx_double Ei = arma::cx_double(0, 0);
-    for(int i = 0; i<=N; i++)
+    for(int i = 0; i<N; i++)
     {
         Ei = arma::cx_double(E_min + i*dE, eta);
         Energy.push_back(Ei);
@@ -28,7 +28,7 @@ std::vector<arma::cx_double> Energy(int N, double E_min, double dE, const double
     return Energy;
 }
 
-arma::cx_mat hamiltonian_1D(int len, arma::cx_mat t)
+arma::cx_mat hamiltonian_1D(size_t len, arma::cx_mat t)
 {
     arma::cx_mat Hamiltonian;
     arma::cx_mat H_I = 2*arma::eye<arma::cx_mat>(len, len);
@@ -56,10 +56,9 @@ The function needs following inputs:
 
 std::vector<arma::cx_mat> sancho_rubio_algorithm(std::vector<arma::cx_double> Energy, arma::cx_mat t, double tol = 1e-8, int max_iter = 10000)
 {
-    arma::cx_mat A = -t;
-    arma::cx_mat B = -t;
+    arma::cx_mat u = -t;
     arma::cx_mat g_surface_i;
-    arma::cx_mat D;
+    arma::cx_mat h;
     arma::cx_mat alpha;
     arma::cx_mat beta;
     arma::cx_mat epsilon;
@@ -71,52 +70,51 @@ std::vector<arma::cx_mat> sancho_rubio_algorithm(std::vector<arma::cx_double> En
     int iter;
     for(size_t i =0; i< Energy.size(); i++)
     {
-        D = Energy[i]*arma::eye<arma::cx_mat>(t.n_rows, t.n_cols) -2*t;
-        tmp = arma::solve(D, arma::eye<arma::cx_mat>(D.n_rows, D.n_cols));
-        alpha = A*tmp*A;
-        beta = B*tmp*B;
-        epsilon = D - B*tmp*A - A*tmp*B;
-        epsilon_s = D - A*tmp*B;
+        h = 2*t;
+        tmp = arma::solve(Energy[i]*arma::eye<arma::cx_mat>(u.n_rows, u.n_cols)-h, arma::eye<arma::cx_mat>(h.n_rows, h.n_cols));
+        alpha = u*tmp*u;
+        beta = arma::trans(u)*tmp*arma::trans(u);
+        epsilon_s = h + u*tmp*arma::trans(u);
+        epsilon = epsilon_s + arma::trans(u)*tmp*u;
+        
 
         delta = 1.0;
         iter = 0;
 
         while(delta>=tol && iter<=max_iter)
         {
-            tmp = arma::solve(epsilon, arma::eye<arma::cx_mat>(epsilon.n_rows, epsilon.n_cols));
-            epsilon -=beta*tmp*alpha +alpha*tmp*beta;
+            tmp = arma::solve(Energy[i]*arma::eye<arma::cx_mat>(u.n_rows, u.n_cols)-epsilon, arma::eye<arma::cx_mat>(epsilon.n_rows, epsilon.n_cols));
             epsilon_s_prev = epsilon_s;
-            epsilon_s -= alpha*tmp*beta;
+            epsilon_s += alpha*tmp*beta;
+            epsilon +=beta*tmp*alpha +alpha*tmp*beta;
             alpha = alpha*tmp*alpha;
             beta = beta*tmp*beta;
             
             delta = arma::norm(epsilon_s - epsilon_s_prev, "fro");
             iter++;
         }
-        
-        g_surface_i = arma::solve(epsilon_s, arma::eye<arma::cx_mat>(epsilon_s.n_rows, epsilon_s.n_cols));
+        if (delta > 1e-3) std::cout << "Did not converge for E=" << Energy[i].real() << "\n";
+        if (iter == max_iter) std::cout << "Did not converge for E=" << Energy[i].real() << "\n";
+
+        g_surface_i = arma::solve(Energy[i]*arma::eye<arma::cx_mat>(u.n_rows, u.n_cols)-epsilon_s, arma::eye<arma::cx_mat>(epsilon_s.n_rows, epsilon_s.n_cols));
         g_surface.push_back(g_surface_i);
     }
     return g_surface;
 }
 
 
-std::vector<arma::cx_mat> retarted_GF(int len, std::vector<arma::cx_double> Energy,  std::vector<arma::cx_mat> self_energy_left, std::vector<arma::cx_mat> self_energy_right, arma::cx_mat Hamiltonian)
+std::vector<arma::cx_mat> retarted_GF(std::vector<arma::cx_double> Energy,  std::vector<arma::cx_mat> self_energy_left, std::vector<arma::cx_mat> self_energy_right, arma::cx_mat Hamiltonian)
 {
     arma::cx_mat mat_2_inv;
     arma::cx_mat tmp;
-    arma::cx_mat tmp_left = arma::zeros<arma::cx_mat>(len, len);
-    arma::cx_mat tmp_right = arma::zeros<arma::cx_mat>(len, len);
-    arma::cx_mat self_energy_left_mat;
-    arma::cx_mat self_energy_right_mat;
-    tmp_left(0,0) = 1;
-    tmp_right(len-1,len-1) = 1;
     std::vector<arma::cx_mat> GF_retarted;
+    arma::cx_mat H;
     for(size_t i = 0; i< Energy.size(); i++)
     {
-        self_energy_left_mat = arma::kron(tmp_left, self_energy_left[i]);
-        self_energy_right_mat = arma::kron(tmp_right, self_energy_right[i]);
-        mat_2_inv = Energy[i] - Hamiltonian - self_energy_left_mat - self_energy_right_mat;
+        H=Hamiltonian;
+        H(0,0) += self_energy_left[i](0,0);
+        H(Hamiltonian.n_rows-1, Hamiltonian.n_cols-1) += self_energy_right[i](0,0);
+        mat_2_inv = Energy[i]*arma::eye<arma::cx_mat>(H.n_rows, H.n_cols) - H;
         tmp = arma::solve(mat_2_inv, arma::eye<arma::cx_mat>(mat_2_inv.n_rows, mat_2_inv.n_cols));
         GF_retarted.push_back(tmp);
     }
@@ -127,18 +125,27 @@ std::vector<arma::cx_double> Transport_function(std::vector<arma::cx_mat> retard
 {
     std::vector<arma::cx_double> transport_function;
     arma::cx_mat GF_advanced;
-    arma::cx_double G_1N;
-    arma::cx_double G_N1;
     for(size_t i = 0; i<retarded_Greens_function.size(); i++)
     {
         GF_advanced = arma::trans(retarded_Greens_function[i]);
-        G_1N = retarded_Greens_function[i](0, retarded_Greens_function[i].n_cols-1);
-        G_N1 = GF_advanced(retarded_Greens_function[i].n_cols-1, 0);
-        transport_function.push_back(gamma_left[i](0,0)*G_1N*gamma_right[i](0,0)*G_N1);
-        //std::cout << G_N1 << " " << gamma_right[i](0, 0) << " " << G_1N << " " << gamma_left[i](0, 0) << std::endl;
+        transport_function.push_back(arma::trace(GF_advanced(1,GF_advanced.n_rows-1)*gamma_right[i]*retarded_Greens_function[i](1, retarded_Greens_function[i].n_cols-1)*gamma_left[i]));
+        
     }
     return transport_function;
 }
+
+void ldos(std::vector<arma::cx_mat>& spectral_function, std::vector<arma::cx_double>& density_of_states, std::vector<arma::cx_mat> retarted_Greens_functions)
+{
+    arma::cx_mat advanced_Greens_functions;
+    arma::cx_double ii = arma::cx_double(0,1);
+    for(size_t i = 0; i < retarted_Greens_functions.size(); i++)
+    {
+        advanced_Greens_functions = arma::trans(retarted_Greens_functions[i]);
+        spectral_function.push_back(ii*(retarted_Greens_functions[i]-advanced_Greens_functions));
+        density_of_states.push_back(arma::trace(spectral_function[i])/(2*M_PI));
+    }
+}
+
 
 
 
@@ -146,11 +153,12 @@ int main()
 {
     
     //initial values required for the energy
-    double E_min = -1.0;            //minimum energy in eV
-    const double eta = 1e-12;       //a small constant approaching zero that models discontinuity in eV
+    double E_min = -1;            //minimum energy in eV
+    const double eta = 1e-18;       //a small constant approaching zero that models discontinuity in eV
     double dE = 0.001;               //the difference between next and previous energy eV    
     int N = 6/dE;                   //number of points calculated
-    int size = 100;
+    size_t size = 10;
+
 
     //Assaining an energy
     std::vector<arma::cx_double> E = Energy(N, E_min, dE, eta);     //energy data of the system in eV
@@ -178,7 +186,7 @@ int main()
 
     arma::cx_mat H_sample = hamiltonian_1D(size, t);
     
-    std::vector<arma::cx_mat> GF_retarted = retarted_GF(size, E, self_energy_left, self_energy_right, H_sample);
+    std::vector<arma::cx_mat> GF_retarted = retarted_GF( E, self_energy_left, self_energy_right, H_sample);
 
     std::vector<arma::cx_mat> GF_advanced;
     
@@ -191,6 +199,12 @@ int main()
 
     double e = 1;
     double h = 4.135667662e-15;
+
+    std::vector<arma::cx_mat> A;
+
+    std::vector<arma::cx_double> DOS;
+
+    ldos(A, DOS, GF_retarted);
 
     std::cout<<"Calculations ended succesfully\n";
 
@@ -398,6 +412,29 @@ int main()
 
     Greens_fun_advanced.close();
     std::cout << "advanced Greens function saved to a file succesfully\n";
+
+    std::fstream LDOS("LDOS.dat", std::ios::out);
+
+    if(!LDOS)
+    {
+        std::system("touch LDOS.dat");
+    }
+
+    if(!LDOS)
+    {
+        std::cerr << "File LDOS.dat was unable to open";
+        return 1;
+    }
+
+    
+    for(size_t i = 0; i<E.size(); i++)
+    {
+        LDOS << E[i].real() << " " << DOS[i].real() << " " << DOS[i].imag() << std::endl;
+    }
+    
+    LDOS.close();
+    std::cout << "Local density of states saved to a file succesfully\n";
+
 
     return 0;
 }
